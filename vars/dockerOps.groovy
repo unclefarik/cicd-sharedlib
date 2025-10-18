@@ -1,33 +1,63 @@
-def buildAndPush(String dockerRepo, String dockerCreds, String imageMain, String imageDev) {
-    script {
-        def localImage = (env.BRANCH_TO_USE == 'main') ?
-            "${imageMain}:${env.IMAGE_TAG_TO_USE}" :
-            "${imageDev}:${env.IMAGE_TAG_TO_USE}"
+#!/usr/bin/env groovy
 
-        def hubTag = "${dockerRepo}:${env.DOCKER_TAG_FINAL}"
+/**
+ * Docker operations for linting, building, scanning, pushing, and deploying.
+ */
 
-        // Build and tag
-        sh "docker build -t ${localImage} -t ${hubTag} ."
+def lintDockerfile() {
+    echo "Running hadolint..."
+    sh '''
+        docker run --rm -i hadolint/hadolint:latest < Dockerfile || true
+    '''
+}
 
-        // Push to Docker Hub
-        docker.withRegistry('https://index.docker.io/v1/', dockerCreds) {
-            sh "docker push ${hubTag}"
-        }
+def buildImage(String dockerRepo, String imageMain, String imageDev,
+               String branch, String imageTag, String dockerTagFinal) {
+    def localImage = (branch == 'main')
+        ? "${imageMain}:${imageTag}"
+        : "${imageDev}:${imageTag}"
 
-        echo "✅ Built and pushed ${hubTag}"
-        env.IMAGE_NAME_HUB = hubTag
+    def hubTag = "${dockerRepo}:${dockerTagFinal}"
+
+    echo "Building image: ${hubTag}"
+    sh "docker build -t ${localImage} -t ${hubTag} ."
+
+    echo "Built image ${hubTag}"
+    return hubTag
+}
+
+def scanImage(String imageRef) {
+    echo "Scanning ${imageRef} for vulnerabilities..."
+    sh """
+        docker run --rm \
+          -v \$HOME/.cache/trivy:/root/.cache/ \
+          -v /var/run/docker.sock:/var/run/docker.sock \
+          aquasec/trivy:latest image \
+          --exit-code 1 \
+          --severity HIGH,CRITICAL ${imageRef} || true
+    """
+}
+
+def pushImage(String dockerCreds, String imageRef) {
+    echo "Pushing ${imageRef} to Docker Hub..."
+    docker.withRegistry('https://index.docker.io/v1/', dockerCreds) {
+        sh "docker push ${imageRef}"
+    }
+    echo "Pushed ${imageRef}"
+}
+
+def triggerDeploy(String branch, String imageTag) {
+    def deployJob = (branch == 'main') ? 'Deploy_to_main' :
+                    (branch == 'dev')  ? 'Deploy_to_dev'  : null
+
+    if (deployJob) {
+        echo "Triggering deploy job: ${deployJob}"
+        build job: deployJob, parameters: [
+            string(name: 'IMAGE_TAG', value: imageTag)
+        ]
+    } else {
+        echo "Unknown branch: ${branch} — skipping deploy."
     }
 }
 
-def triggerDeploy() {
-    if (env.BRANCH_TO_USE == 'main') {
-        build job: 'Deploy_to_main', parameters: [
-            string(name: 'IMAGE_TAG', value: env.IMAGE_TAG_TO_USE)
-        ]
-    } else if (env.BRANCH_TO_USE == 'dev') {
-        build job: 'Deploy_to_dev', parameters: [
-            string(name: 'IMAGE_TAG', value: env.IMAGE_TAG_TO_USE)
-        ]
-    }
-}
-
+return this

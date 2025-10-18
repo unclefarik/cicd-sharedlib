@@ -1,16 +1,31 @@
+#!/usr/bin/env groovy
+
+/**
+ * Utility functions for preparing tools and environment data.
+ */
 def prepareTools() {
+    echo "🔧 Installing helper tools..."
     sh 'apk add --no-cache git bash docker-cli'
 }
 
-def determineBranchEnv() {
-    def BR = env.BRANCH_NAME ?: params.TARGET_ENV
-    def TAG = params.IMAGE_TAG ?: 'v1.0'
+/**
+ * Determines which branch, tag, and final Docker tag to use.
+ * Returns a map: [branchToUse, imageTagToUse, dockerTagFinal]
+ */
+def determineBranchEnv(String branchName = null, String targetEnv = null, String imageTag = 'v1.0') {
+    def branch = branchName ?: targetEnv ?: 'dev'
+    def tag = imageTag ?: 'v1.0'
+    def dockerTag = "${branch}-${tag}"
 
-    env.BRANCH_TO_USE = BR
-    env.IMAGE_TAG_TO_USE = TAG
-    env.DOCKER_TAG_FINAL = "${BR}-${TAG}"
+    echo "📦 Using branch/environment: ${branch}"
+    echo "🏷️  Image tag: ${tag}"
+    echo "🐳 Docker tag: ${dockerTag}"
 
-    echo "Branch/environment: ${env.BRANCH_TO_USE}"
-    echo "Docker tag: ${env.DOCKER_TAG_FINAL}"
+    return [
+        branchToUse   : branch,
+        imageTagToUse : tag,
+        dockerTagFinal: dockerTag
+    ]
 }
 
+return this
