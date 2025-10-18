@@ -17,9 +17,9 @@ def determineBranchEnv(String branchName = null, String targetEnv = null, String
     def tag = imageTag ?: 'v1.0'
     def dockerTag = "${branch}-${tag}"
 
-    echo "📦 Using branch/environment: ${branch}"
-    echo "🏷️  Image tag: ${tag}"
-    echo "🐳 Docker tag: ${dockerTag}"
+    echo "Using branch/environment: ${branch}"
+    echo "Image tag: ${tag}"
+    echo "Docker tag: ${dockerTag}"
 
     return [
         branchToUse   : branch,
